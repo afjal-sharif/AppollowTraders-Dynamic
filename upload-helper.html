@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upload HTML to KV</title>
+<style>
+body{font-family:system-ui;max-width:700px;margin:40px auto;padding:20px;background:#f1f5f9}
+h1{color:#1e3a8a;font-size:22px}
+.step{background:white;padding:20px;border-radius:12px;margin:16px 0;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.step h3{color:#334155;margin-bottom:8px}
+textarea{width:100%;height:200px;font-family:monospace;font-size:11px;border:2px solid #cbd5e1;border-radius:8px;padding:10px;resize:vertical}
+button{background:#1e3a8a;color:white;border:none;padding:12px 24px;border-radius:8px;font-size:14px;cursor:pointer;margin-top:10px}
+button:hover{background:#1e40af}
+.success{color:#16a34a;font-weight:bold;margin-top:10px}
+.error{color:#dc2626;font-weight:bold;margin-top:10px}
+code{background:#e2e8f0;padding:2px 6px;border-radius:4px;font-size:13px}
+.note{background:#fef3c7;padding:12px;border-radius:8px;margin:8px 0;font-size:13px;color:#92400e}
+</style>
+</head>
+<body>
+<h1>📋 Step 1: Copy the HTML content</h1>
+
+<div class="step">
+<h3>Open <code>dist/index.html</code> and copy ALL content</h3>
+<p>Or click the button below to see it (if you opened this file from the project):</p>
+<textarea id="htmlContent" placeholder="Paste the ENTIRE content of dist/index.html here..."></textarea>
+<p style="margin-top:8px;font-size:13px;color:#64748b">The content should start with <code>&lt;!doctype html&gt;</code></p>
+</div>
+
+<h1>📋 Step 2: Go to Cloudflare KV and paste</h1>
+
+<div class="step">
+<h3>Instructions:</h3>
+<ol style="line-height:2;font-size:14px">
+<li>Go to <a href="https://dash.cloudflare.com" target="_blank">dash.cloudflare.com</a></li>
+<li>Click <b>Workers & Pages</b> → <b>KV</b></li>
+<li>Click on your <b>DATA_STORE</b> namespace</li>
+<li>Click <b>"+ Add entry"</b></li>
+<li>Key: type <code>APP_HTML</code></li>
+<li>Value: paste the HTML content from Step 1</li>
+<li>Click <b>Save</b></li>
+</ol>
+</div>
+
+<h1>📋 Step 3: Update worker.js</h1>
+
+<div class="step">
+<h3>Instructions:</h3>
+<ol style="line-height:2;font-size:14px">
+<li>Go to <b>Workers & Pages</b></li>
+<li>Click your worker name</li>
+<li>Click <b>"Edit Code"</b></li>
+<li>Select All (Ctrl+A) → Delete everything</li>
+<li>Copy ALL content of <code>DEPLOY-worker.js</code> and paste</li>
+<li>Click <b>"Save and Deploy"</b></li>
+</ol>
+</div>
+
+<div class="note">
+⚠️ Make sure your worker has these bindings in Settings:<br>
+• KV Namespace: <code>DATA_STORE</code><br>
+• R2 Bucket: <code>DOC_BUCKET</code>
+</div>
+
+</body>
+</html>
