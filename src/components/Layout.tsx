@@ -97,7 +97,7 @@ export default function Layout({ children, userRole = 'none' }: { children: Reac
             { path: '/banks', icon: Landmark, label: 'ব্যাংক' },
             { path: '/documents', icon: FileText, label: 'ডকুমেন্ট' },
             { path: '/vehicles', icon: Car, label: 'গাড়ি' },
-            { path: '/admin', icon: Settings, label: 'অ্যাডমিন' },
+            ...(userRole === 'admin' || userRole === 'superadmin' ? [{ path: '/admin', icon: Settings, label: 'অ্যাডমিন' }] : []),
           ].map((item) => {
             const active = location.pathname === item.path;
             return (

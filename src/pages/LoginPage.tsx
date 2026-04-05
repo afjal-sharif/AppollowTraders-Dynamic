@@ -23,12 +23,18 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     try {
       const res = await fetch('/api/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache'
+        },
         credentials: 'include',
+        cache: 'no-store',
         body: JSON.stringify({ pin: pin.trim() }),
       });
       const data = await res.json();
       if (data.success) {
+        // Force a small delay to ensure cookie is set
+        await new Promise(r => setTimeout(r, 100));
         onLogin();
       } else {
         setError(data.message || 'ভুল পিন! আবার চেষ্টা করুন।');

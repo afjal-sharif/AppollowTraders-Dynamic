@@ -42,7 +42,8 @@ async function handleRequest(request, env) {
   const USE_KV_LICENSE = true;
 
   const cookie = request.headers.get("Cookie") || "";
-  const loggedIn = cookie.includes("auth=1");
+  // Check for all three role types
+  const loggedIn = cookie.includes("auth=user") || cookie.includes("auth=admin") || cookie.includes("auth=superadmin");
 
   // ================= CRON =================
   if (url.pathname === "/cron-check") {
@@ -131,11 +132,14 @@ async function handleRequest(request, env) {
   // ================= AUTH =================
   if (url.pathname === "/api/login" && request.method === "POST") {
     const data = await request.json();
+    // Use SameSite=Lax and add Secure for WebView compatibility
+    const cookieOpts = "Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000"; // 1 year
+    
     if (data.pin === PIN) {
       return new Response(JSON.stringify({ success: true, role: "user" }), {
         headers: {
           "content-type": "application/json",
-          "Set-Cookie": "auth=user; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400"
+          "Set-Cookie": `auth=user; ${cookieOpts}`
         }
       });
     }
@@ -143,7 +147,7 @@ async function handleRequest(request, env) {
       return new Response(JSON.stringify({ success: true, role: "admin" }), {
         headers: {
           "content-type": "application/json",
-          "Set-Cookie": "auth=admin; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400"
+          "Set-Cookie": `auth=admin; ${cookieOpts}`
         }
       });
     }
@@ -151,7 +155,7 @@ async function handleRequest(request, env) {
       return new Response(JSON.stringify({ success: true, role: "superadmin" }), {
         headers: {
           "content-type": "application/json",
-          "Set-Cookie": "auth=superadmin; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400"
+          "Set-Cookie": `auth=superadmin; ${cookieOpts}`
         }
       });
     }
@@ -162,7 +166,7 @@ async function handleRequest(request, env) {
     return new Response(JSON.stringify({ success: true }), {
       headers: {
         "content-type": "application/json",
-        "Set-Cookie": "auth=; Path=/; HttpOnly; Max-Age=0"
+        "Set-Cookie": "auth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
       }
     });
   }

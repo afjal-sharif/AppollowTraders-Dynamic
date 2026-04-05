@@ -48,7 +48,11 @@ export default function App() {
   const checkAuth = async () => {
     try {
       // Step 1: Check if user is logged in (has valid auth cookie)
-      const authRes = await fetch('/api/check-auth', { credentials: 'include' });
+      const authRes = await fetch('/api/check-auth', { 
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       if (!authRes.ok) {
         setAuthState('login');
         return;
@@ -61,10 +65,13 @@ export default function App() {
       }
 
       // Store the user role
-      setUserRole(authData.role);
+      setUserRole(authData.role as any);
 
       // Step 2: Check license status
-      const licRes = await fetch('/api/license-info', { credentials: 'include' });
+      const licRes = await fetch('/api/license-info', { 
+        credentials: 'include',
+        cache: 'no-store'
+      });
       if (licRes.ok) {
         const licData = await licRes.json();
         if (licData.status === 'EXPIRED') {
@@ -106,7 +113,10 @@ export default function App() {
   if (authState === 'login') {
     return (
       <Suspense fallback={<PageLoader />}>
-        <LoginPage onLogin={() => setAuthState('authenticated')} />
+        <LoginPage onLogin={() => {
+          // Re-check auth to get the role
+          checkAuth();
+        }} />
       </Suspense>
     );
   }
