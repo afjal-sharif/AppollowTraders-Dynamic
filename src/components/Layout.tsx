@@ -4,19 +4,29 @@ import {
   Home, Landmark, FileText, Car, Plus, Settings, Shield, Menu, X, ChevronRight,
 } from 'lucide-react';
 
-const navItems = [
-  { path: '/', label: '🏠 ড্যাশবোর্ড', icon: Home },
-  { path: '/banks', label: '🏦 ব্যাংক', icon: Landmark },
-  { path: '/documents', label: '📄 ডকুমেন্টস', icon: FileText },
-  { path: '/vehicles', label: '🚗 গাড়ি', icon: Car },
-  { path: '/add-bank', label: '➕ ব্যাংক যোগ', icon: Plus },
-  { path: '/add-document', label: '➕ ডকুমেন্ট যোগ', icon: Plus },
-  { path: '/add-vehicle', label: '➕ গাড়ি যোগ', icon: Plus },
-  { path: '/admin', label: '⚙ অ্যাডমিন', icon: Settings },
-  { path: '/super-admin', label: '🔐 সুপার অ্যাডমিন', icon: Shield },
-];
+function getNavItems(userRole: 'none' | 'user' | 'admin' | 'superadmin') {
+  const items = [
+    { path: '/', label: '🏠 ড্যাশবোর্ড', icon: Home },
+    { path: '/banks', label: '🏦 ব্যাংক', icon: Landmark },
+    { path: '/documents', label: '📄 ডকুমেন্টস', icon: FileText },
+    { path: '/vehicles', label: '🚗 গাড়ি', icon: Car },
+    { path: '/add-bank', label: '➕ ব্যাংক যোগ', icon: Plus },
+    { path: '/add-document', label: '➕ ডকুমেন্ট যোগ', icon: Plus },
+    { path: '/add-vehicle', label: '➕ গাড়ি যোগ', icon: Plus },
+  ];
+  
+  if (userRole === 'admin' || userRole === 'superadmin') {
+    items.push({ path: '/admin', label: '⚙ অ্যাডমিন', icon: Settings });
+  }
+  
+  if (userRole === 'superadmin') {
+    items.push({ path: '/super-admin', label: '🔐 সুপার অ্যাডমিন', icon: Shield });
+  }
+  
+  return items;
+}
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default function Layout({ children, userRole = 'none' }: { children: React.ReactNode; userRole?: 'none' | 'user' | 'admin' | 'superadmin' }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -56,7 +66,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </button>
             </div>
             <nav className="space-y-1">
-              {navItems.map((item) => {
+              {getNavItems(userRole).map((item) => {
                 const active = location.pathname === item.path;
                 return (
                   <button

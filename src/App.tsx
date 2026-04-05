@@ -29,9 +29,11 @@ function PageLoader() {
 
 export default function App() {
   const [authState, setAuthState] = useState<'checking' | 'login' | 'expired' | 'authenticated'>('checking');
+  const [userRole, setUserRole] = useState<'none' | 'user' | 'admin' | 'superadmin'>('none');
 
   const handleLogout = useCallback(() => {
     setAuthState('login');
+    setUserRole('none');
   }, []);
 
   useEffect(() => {
@@ -57,6 +59,9 @@ export default function App() {
         setAuthState('login');
         return;
       }
+
+      // Store the user role
+      setUserRole(authData.role);
 
       // Step 2: Check license status
       const licRes = await fetch('/api/license-info', { credentials: 'include' });
@@ -108,7 +113,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Layout>
+      <Layout userRole={userRole}>
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<HomePage />} />

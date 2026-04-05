@@ -20,11 +20,16 @@ export default {
 async function handleRequest(request, env) {
   const url = new URL(request.url);
 
-  // Load PIN and Master Key from KV (with defaults on first run)
+  // Load PINs from KV (with defaults on first run)
   let PIN = await env.DATA_STORE.get("APP_PIN");
   if (!PIN) {
     PIN = "1234";
     await env.DATA_STORE.put("APP_PIN", PIN);
+  }
+  let ADMIN_PIN = await env.DATA_STORE.get("APP_ADMIN_PIN");
+  if (!ADMIN_PIN) {
+    ADMIN_PIN = "5678";
+    await env.DATA_STORE.put("APP_ADMIN_PIN", ADMIN_PIN);
   }
   let MASTER_KEY = await env.DATA_STORE.get("APP_MASTER_KEY");
   if (!MASTER_KEY) {
@@ -127,10 +132,26 @@ async function handleRequest(request, env) {
   if (url.pathname === "/api/login" && request.method === "POST") {
     const data = await request.json();
     if (data.pin === PIN) {
-      return new Response(JSON.stringify({ success: true }), {
+      return new Response(JSON.stringify({ success: true, role: "user" }), {
         headers: {
           "content-type": "application/json",
-          "Set-Cookie": "auth=1; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400"
+          "Set-Cookie": "auth=user; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400"
+        }
+      });
+    }
+    if (data.pin === ADMIN_PIN) {
+      return new Response(JSON.stringify({ success: true, role: "admin" }), {
+        headers: {
+          "content-type": "application/json",
+          "Set-Cookie": "auth=admin; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400"
+        }
+      });
+    }
+    if (data.pin === MASTER_KEY) {
+      return new Response(JSON.stringify({ success: true, role: "superadmin" }), {
+        headers: {
+          "content-type": "application/json",
+          "Set-Cookie": "auth=superadmin; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400"
         }
       });
     }
@@ -147,13 +168,44 @@ async function handleRequest(request, env) {
   }
 
   if (url.pathname === "/api/check-auth") {
-    return Response.json({ loggedIn });
+    // Determine role from cookie
+    let role = "none";
+    if (cookie.includes("auth=user")) role = "user";
+    else if (cookie.includes("auth=admin")) role = "admin";
+    else if (cookie.includes("auth=superadmin")) role = "superadmin";
+    
+    return Response.json({ 
+      loggedIn: role !== "none", 
+      role: role 
+    });
   }
 
   // ================= AUTH GUARD FOR API =================
+  // Define which endpoints are public
+  const publicApiEndpoints = ["/api/login", "/api/license-info", "/api/check-auth"];
+  
   if (url.pathname.startsWith("/api/") && !loggedIn) {
-    if (url.pathname !== "/api/login" && url.pathname !== "/api/license-info") {
+    if (!publicApiEndpoints.includes(url.pathname)) {
       return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
+  }
+  
+  // Admin-only endpoints check
+  if (url.pathname.startsWith("/api/") && loggedIn) {
+    const adminOnlyEndpoints = ["/api/change-pin", "/api/change-master-key", "/api/credentials-info", "/api/settings", "/api/delete", "/api/delete-all", "/api/backup", "/api/restore", "/api/backup-list", "/api/delete-backup"];
+    if (adminOnlyEndpoints.includes(url.pathname)) {
+      const role = cookie.includes("auth=admin") || cookie.includes("auth=superadmin") ? (cookie.includes("auth=superadmin") ? "superadmin" : "admin") : "user";
+      if (role === "user") {
+        return Response.json({ error: "admin_required" }, { status: 403 });
+      }
+    }
+    // Super Admin only endpoints
+    const superAdminEndpoints = ["/api/change-master-key"];
+    if (superAdminEndpoints.includes(url.pathname)) {
+      const role = cookie.includes("auth=superadmin") ? "superadmin" : "admin";
+      if (role !== "superadmin") {
+        return Response.json({ error: "superadmin_required" }, { status: 403 });
+      }
     }
   }
 
@@ -179,7 +231,11 @@ async function handleRequest(request, env) {
 
   // ================= API: GET CREDENTIALS INFO (Protected) =================
   if (url.pathname === "/api/credentials-info" && request.method === "GET") {
-    return Response.json({ pin: PIN, masterKey: MASTER_KEY });
+    return Response.json({ 
+      pin: PIN, 
+      adminPin: ADMIN_PIN, 
+      masterKey: MASTER_KEY 
+    });
   }
 
   // ================= SETTINGS API (edit/delete toggle) =================
