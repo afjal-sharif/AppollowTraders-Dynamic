@@ -19,31 +19,15 @@ export default {
 
 async function handleRequest(request, env) {
   const url = new URL(request.url);
-
-  // Load PINs from KV (with defaults on first run)
-  let PIN = await env.DATA_STORE.get("APP_PIN");
-  if (!PIN) {
-    PIN = "1234";
-    await env.DATA_STORE.put("APP_PIN", PIN);
-  }
-  let ADMIN_PIN = await env.DATA_STORE.get("APP_ADMIN_PIN");
-  if (!ADMIN_PIN) {
-    ADMIN_PIN = "5678";
-    await env.DATA_STORE.put("APP_ADMIN_PIN", ADMIN_PIN);
-  }
-  let MASTER_KEY = await env.DATA_STORE.get("APP_MASTER_KEY");
-  if (!MASTER_KEY) {
-    MASTER_KEY = "698846";
-    await env.DATA_STORE.put("APP_MASTER_KEY", MASTER_KEY);
-  }
+  const PIN = "1234";
+  const MASTER_KEY = "698846";
 
   // License systems
   const LICENSE_EXPIRE = "2026-12-31";
   const USE_KV_LICENSE = true;
 
   const cookie = request.headers.get("Cookie") || "";
-  // Check for all three role types
-  const loggedIn = cookie.includes("auth=user") || cookie.includes("auth=admin") || cookie.includes("auth=superadmin");
+  const loggedIn = cookie.includes("auth=1");
 
   // ================= CRON =================
   if (url.pathname === "/cron-check") {
@@ -51,8 +35,7 @@ async function handleRequest(request, env) {
     if (token !== CRON_SECRET) {
       return new Response("Unauthorized", { status: 403 });
     }
-    // Force send alerts for cron (bypass daily check)
-    await checkVehicleAlerts(env, true);
+    await checkVehicleAlerts(env);
     await handleRequest(
       new Request(request.url.replace("/cron-check", "/api/backup")),
       env
@@ -65,6 +48,7 @@ async function handleRequest(request, env) {
   if (!masterAccess) {
     const today = new Date().toISOString().split("T")[0];
     if (today > LICENSE_EXPIRE) {
+      // Return expired status for API, or expired page for HTML
       if (url.pathname.startsWith("/api/")) {
         return Response.json({ error: "license_expired" }, { status: 403 });
       }
@@ -132,30 +116,11 @@ async function handleRequest(request, env) {
   // ================= AUTH =================
   if (url.pathname === "/api/login" && request.method === "POST") {
     const data = await request.json();
-    // Use SameSite=Lax and add Secure for WebView compatibility
-    const cookieOpts = "Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000"; // 1 year
-    
     if (data.pin === PIN) {
-      return new Response(JSON.stringify({ success: true, role: "user" }), {
+      return new Response(JSON.stringify({ success: true }), {
         headers: {
           "content-type": "application/json",
-          "Set-Cookie": `auth=user; ${cookieOpts}`
-        }
-      });
-    }
-    if (data.pin === ADMIN_PIN) {
-      return new Response(JSON.stringify({ success: true, role: "admin" }), {
-        headers: {
-          "content-type": "application/json",
-          "Set-Cookie": `auth=admin; ${cookieOpts}`
-        }
-      });
-    }
-    if (data.pin === MASTER_KEY) {
-      return new Response(JSON.stringify({ success: true, role: "superadmin" }), {
-        headers: {
-          "content-type": "application/json",
-          "Set-Cookie": `auth=superadmin; ${cookieOpts}`
+          "Set-Cookie": "auth=1; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400"
         }
       });
     }
@@ -166,107 +131,21 @@ async function handleRequest(request, env) {
     return new Response(JSON.stringify({ success: true }), {
       headers: {
         "content-type": "application/json",
-        "Set-Cookie": "auth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+        "Set-Cookie": "auth=; Path=/; HttpOnly; Max-Age=0"
       }
     });
   }
 
   if (url.pathname === "/api/check-auth") {
-    // Determine role from cookie
-    let role = "none";
-    if (cookie.includes("auth=user")) role = "user";
-    else if (cookie.includes("auth=admin")) role = "admin";
-    else if (cookie.includes("auth=superadmin")) role = "superadmin";
-    
-    return Response.json({ 
-      loggedIn: role !== "none", 
-      role: role 
-    });
+    return Response.json({ loggedIn });
   }
 
   // ================= AUTH GUARD FOR API =================
-  // Define which endpoints are public
-  const publicApiEndpoints = ["/api/login", "/api/license-info", "/api/check-auth"];
-  
   if (url.pathname.startsWith("/api/") && !loggedIn) {
-    if (!publicApiEndpoints.includes(url.pathname)) {
+    // Allow login and license-info without auth
+    if (url.pathname !== "/api/login" && url.pathname !== "/api/license-info") {
       return Response.json({ error: "unauthorized" }, { status: 401 });
     }
-  }
-  
-  // Admin-only endpoints check
-  if (url.pathname.startsWith("/api/") && loggedIn) {
-    const adminOnlyEndpoints = ["/api/change-pin", "/api/change-master-key", "/api/credentials-info", "/api/delete", "/api/delete-all", "/api/backup", "/api/restore", "/api/backup-list", "/api/delete-backup"];
-    if (adminOnlyEndpoints.includes(url.pathname)) {
-      const role = cookie.includes("auth=admin") || cookie.includes("auth=superadmin") ? (cookie.includes("auth=superadmin") ? "superadmin" : "admin") : "user";
-      if (role === "user") {
-        return Response.json({ error: "admin_required" }, { status: 403 });
-      }
-    }
-    // /api/settings POST requires admin, but GET is public for all logged-in users
-    if (url.pathname === "/api/settings" && request.method === "POST") {
-      const role = cookie.includes("auth=admin") || cookie.includes("auth=superadmin") ? (cookie.includes("auth=superadmin") ? "superadmin" : "admin") : "user";
-      if (role === "user") {
-        return Response.json({ error: "admin_required" }, { status: 403 });
-      }
-    }
-    // Super Admin only endpoints
-    const superAdminEndpoints = ["/api/change-master-key"];
-    if (superAdminEndpoints.includes(url.pathname)) {
-      const role = cookie.includes("auth=superadmin") ? "superadmin" : "admin";
-      if (role !== "superadmin") {
-        return Response.json({ error: "superadmin_required" }, { status: 403 });
-      }
-    }
-  }
-
-  // ================= API: CHANGE PIN (Protected) =================
-  if (url.pathname === "/api/change-pin" && request.method === "POST") {
-    const data = await request.json();
-    if (!data.newPin || data.newPin.length < 4) {
-      return Response.json({ success: false, message: "পিন কমপক্ষে ৪ সংখ্যার হতে হবে" });
-    }
-    await env.DATA_STORE.put("APP_PIN", data.newPin);
-    return Response.json({ success: true });
-  }
-
-  // ================= API: CHANGE MASTER KEY (Protected) =================
-  if (url.pathname === "/api/change-master-key" && request.method === "POST") {
-    const data = await request.json();
-    if (!data.newKey || data.newKey.length < 4) {
-      return Response.json({ success: false, message: "মাস্টার কী কমপক্ষে ৪ সংখ্যার হতে হবে" });
-    }
-    await env.DATA_STORE.put("APP_MASTER_KEY", data.newKey);
-    return Response.json({ success: true });
-  }
-
-  // ================= API: GET CREDENTIALS INFO (Protected) =================
-  if (url.pathname === "/api/credentials-info" && request.method === "GET") {
-    return Response.json({ 
-      pin: PIN, 
-      adminPin: ADMIN_PIN, 
-      masterKey: MASTER_KEY 
-    });
-  }
-
-  // ================= SETTINGS API (edit/delete toggle) =================
-  if (url.pathname === "/api/settings" && request.method === "GET") {
-    const raw = await env.DATA_STORE.get("APP_SETTINGS");
-    if (raw) {
-      try {
-        return Response.json(JSON.parse(raw));
-      } catch (e) {}
-    }
-    return Response.json({ editEnabled: true, deleteEnabled: true });
-  }
-
-  if (url.pathname === "/api/settings" && request.method === "POST") {
-    const data = await request.json();
-    await env.DATA_STORE.put("APP_SETTINGS", JSON.stringify({
-      editEnabled: !!data.editEnabled,
-      deleteEnabled: !!data.deleteEnabled
-    }));
-    return Response.json({ success: true });
   }
 
   // ================= DATA APIs =================
@@ -290,6 +169,7 @@ async function handleRequest(request, env) {
   if (url.pathname === "/api/save-document" && request.method === "POST") {
     const ct = request.headers.get("content-type") || "";
     if (ct.includes("application/json")) {
+      // Edit mode (no file change)
       const data = await request.json();
       const key = data.key;
       const old = await env.DATA_STORE.get(key);
@@ -306,6 +186,7 @@ async function handleRequest(request, env) {
       return Response.json({ success: true });
     }
 
+    // New document with file
     const form = await request.formData();
     let fileUrl = "";
     const file = form.get("file");
@@ -330,6 +211,7 @@ async function handleRequest(request, env) {
   if (url.pathname === "/api/save-vehicle" && request.method === "POST") {
     const data = await request.json();
     const key = data.key ? data.key : ("vehicle:" + Date.now());
+    // Save version history
     const old = await env.DATA_STORE.get(key);
     if (old) {
       await env.DATA_STORE.put("history:" + key + ":" + Date.now(), old);
@@ -427,26 +309,11 @@ async function handleRequest(request, env) {
     });
   }
 
-  // ================= CHECK ALERTS (once per day, not every refresh) =================
-  if (loggedIn) {
-    // Only run alerts once per day using KV timestamp
-    const todayStr = new Date().toISOString().split("T")[0];
-    const lastAlertDate = await env.DATA_STORE.get("LAST_ALERT_DATE");
-    if (lastAlertDate !== todayStr) {
-      await env.DATA_STORE.put("LAST_ALERT_DATE", todayStr);
-      // Run in background, don't block page load
-      try {
-        await checkVehicleAlerts(env, false);
-      } catch (e) {}
-    }
-  }
+  // ================= CHECK ALERTS (on homepage load) =================
+  await checkVehicleAlerts(env);
 
-  // ================= SERVE FRONTEND FROM KV =================
-  const appHtml = await env.DATA_STORE.get("APP_HTML");
-  if (appHtml) {
-    return html(appHtml);
-  }
-  return html("<h1>App not loaded. Please add APP_HTML to KV.</h1>");
+  // ================= SERVE FRONTEND =================
+  return html(APP_HTML);
 }
 
 // ================= HELPER FUNCTIONS =================
@@ -471,12 +338,10 @@ function html(content) {
   });
 }
 
-async function checkVehicleAlerts(env, forceSend) {
+async function checkVehicleAlerts(env) {
   const vehicles = await safeList(env, "vehicle:");
   const docs = await safeList(env, "doc:");
   const today = new Date();
-  const todayStr = today.toISOString().split("T")[0];
-
   const all = [
     ...vehicles.map(v => ({
       label: v.carNumber + " – " + v.docType,
@@ -492,31 +357,15 @@ async function checkVehicleAlerts(env, forceSend) {
     if (!item.expiry) continue;
     const exp = new Date(item.expiry);
     const diff = Math.floor((exp - today) / (1000 * 60 * 60 * 24));
-
-    // Create a unique key for this alert
-    const alertKey = "alert_sent:" + item.label + ":" + todayStr;
-
     if (diff <= 7 && diff >= 0) {
-      // Check if already sent today (unless forceSend from cron)
-      if (!forceSend) {
-        const alreadySent = await env.DATA_STORE.get(alertKey);
-        if (alreadySent) continue;
-      }
       await sendTelegram(
         `⚠ ${item.label}\n📅 মেয়াদ ${diff} দিনের মধ্যে শেষ হবে (${item.expiry})`
       );
-      // Mark as sent today (expires in 24 hours)
-      await env.DATA_STORE.put(alertKey, "1", { expirationTtl: 86400 });
     }
     if (diff < 0) {
-      if (!forceSend) {
-        const alreadySent = await env.DATA_STORE.get(alertKey);
-        if (alreadySent) continue;
-      }
       await sendTelegram(
         `🚨 ${item.label}\n📅 মেয়াদ শেষ হয়ে গেছে (${item.expiry})`
       );
-      await env.DATA_STORE.put(alertKey, "1", { expirationTtl: 86400 });
     }
   }
 }
@@ -561,3 +410,7 @@ p{color:#64748b;font-size:14px;line-height:1.6}
 </div>
 </body>
 </html>`;
+
+// ================= MAIN APP HTML =================
+// PASTE YOUR dist/index.html CONTENT HERE
+const APP_HTML = `PASTE_DIST_INDEX_HTML_HERE`;
