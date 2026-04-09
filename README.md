@@ -430,3 +430,9 @@ webView.loadUrl("https://your-worker.your-subdomain.workers.dev");
 - [ ] QR কোড জেনারেশন
 - [ ] অফলাইন মোড
 - [ ] মাল্টি-ল্যাঙ্গুয়েজ
+
+---
+
+**তৈরি করেছেন:** Claude (Anthropic AI)  
+**ভার্সন:** 2.0  
+**শেষ আপডেট:** 2024
