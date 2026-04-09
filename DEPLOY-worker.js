@@ -196,8 +196,15 @@ async function handleRequest(request, env) {
   
   // Admin-only endpoints check
   if (url.pathname.startsWith("/api/") && loggedIn) {
-    const adminOnlyEndpoints = ["/api/change-pin", "/api/change-master-key", "/api/credentials-info", "/api/settings", "/api/delete", "/api/delete-all", "/api/backup", "/api/restore", "/api/backup-list", "/api/delete-backup"];
+    const adminOnlyEndpoints = ["/api/change-pin", "/api/change-master-key", "/api/credentials-info", "/api/delete", "/api/delete-all", "/api/backup", "/api/restore", "/api/backup-list", "/api/delete-backup"];
     if (adminOnlyEndpoints.includes(url.pathname)) {
+      const role = cookie.includes("auth=admin") || cookie.includes("auth=superadmin") ? (cookie.includes("auth=superadmin") ? "superadmin" : "admin") : "user";
+      if (role === "user") {
+        return Response.json({ error: "admin_required" }, { status: 403 });
+      }
+    }
+    // /api/settings POST requires admin, but GET is public for all logged-in users
+    if (url.pathname === "/api/settings" && request.method === "POST") {
       const role = cookie.includes("auth=admin") || cookie.includes("auth=superadmin") ? (cookie.includes("auth=superadmin") ? "superadmin" : "admin") : "user";
       if (role === "user") {
         return Response.json({ error: "admin_required" }, { status: 403 });
